@@ -1,7 +1,5 @@
-# 1. Base Image: Sử dụng Python 3.11 Slim (Gọn nhẹ, ổn định)
 FROM python:3.11-slim
 
-# 2. Định nghĩa các biến môi trường cho Spark
 ARG SPARK_VERSION=3.5.1
 ARG HADOOP_VERSION=3
 ENV SPARK_VERSION=${SPARK_VERSION}
@@ -9,10 +7,6 @@ ENV HADOOP_VERSION=${HADOOP_VERSION}
 ENV SPARK_HOME=/spark
 ENV PYTHONUNBUFFERED 1
 
-# =================================================================
-# 3. Cài đặt Java và Spark (ĐÃ FIX LỖI JAVA 17)
-# =================================================================
-# Cài đặt wget, curl (để tải Spark), và OpenJDK 21 (đã khắc phục lỗi Java 17)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     wget \
@@ -21,33 +15,30 @@ RUN apt-get update && \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Tải và giải nén Spark (Sử dụng biến môi trường đã định nghĩa)
-# ĐÃ SỬA: Thêm thư mục $SPARK_VERSION vào URL để khắc phục lỗi 404/exit code 8
 RUN wget -qO /tmp/spark.tgz "https://archive.apache.org/dist/spark/spark-$SPARK_VERSION/spark-$SPARK_VERSION-bin-hadoop$HADOOP_VERSION.tgz" && \
     tar -xzf /tmp/spark.tgz -C /usr/local/ && \
     mv /usr/local/spark-$SPARK_VERSION-bin-hadoop$HADOOP_VERSION $SPARK_HOME && \
     rm /tmp/spark.tgz
 
-# 4. Thiết lập biến môi trường cho Spark
+ENV HADOOP_AWS_VERSION=3.3.4
+ENV AWS_SDK_VERSION=1.12.518
+ENV DELTA_VERSION=2.4.0
+
+RUN echo "Installing S3A/MinIO and Delta Lake JARs..." && wget -nv https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/${HADOOP_AWS_VERSION}/hadoop-aws-${HADOOP_AWS_VERSION}.jar -P $SPARK_HOME/jars && \
+    wget -nv https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/${AWS_SDK_VERSION}/aws-java-sdk-bundle-${AWS_SDK_VERSION}.jar -P $SPARK_HOME/jars && \
+    wget -nv https://repo1.maven.org/maven2/io/delta/delta-core_2.12/${DELTA_VERSION}/delta-core_2.12-${DELTA_VERSION}.jar -P $SPARK_HOME/jars && \
+    echo "S3A and Delta Lake JARs installed successfully in $SPARK_HOME/jars"
+
+RUN echo 'spark.hadoop.fs.s3a.impl org.apache.hadoop.fs.s3a.S3AFileSystem' >> $SPARK_HOME/conf/spark-defaults.conf
+
 ENV PATH=$PATH:$SPARK_HOME/bin
 ENV PYTHONPATH=$PYTHONPATH:$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.9.7-src.zip
 
-# =================================================================
-# 5. Cài đặt Python Dependencies (ĐÃ FIX LỖI COPY/NOT FOUND)
-# =================================================================
-
-# Copy file requirements chuyên biệt cho PySpark
-# File này phải nằm ở data_processing/pyspark_requirements.txt
 COPY data_processing/pyspark_requirements.txt /tmp/pyspark_requirements.txt
 
-# Cài đặt các thư viện Python (pyspark, pandas, geopy, v.v.)
 RUN pip install --no-cache-dir -r /tmp/pyspark_requirements.txt && \
     mkdir -p /app
 
-# 6. Sao chép Script ETL và Thiết lập Môi trường làm việc
 WORKDIR /app
 
-# Copy script ETL chính (cần phải tồn tại)
 COPY data_processing/silver_etl_script.py /app/silver_etl_script.py
-
-# (Không cần ENTRYPOINT/CMD vì service này được gọi qua DockerOperator của Airflow)

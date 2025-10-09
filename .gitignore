@@ -1,26 +1,19 @@
-# Môi trường Python và Cache
-# Loại trừ môi trường ảo cục bộ (venv)
 venv
 .venv
 __pycache__
 *.pyc
 
-# Dữ liệu và Log lớn (Tuyệt đối không push)
-# Dữ liệu của MinIO (Bronze/Silver/Gold)
 minio_data/
-# Logs của Airflow và các service khác
+
 logs/
-# Các file chứa biến môi trường/mật khẩu
+
 .env
-# Dữ liệu tạm của các container/service khác
+
 tmp/
 *.log
 
-# Airflow
-# File Airflow Webserver tạo ra khi chạy
 airflow.cfg
 webserver_config.py
 
-# Cấu hình IDE (Phụ thuộc vào editor bạn dùng)
 .vscode/
 .idea/

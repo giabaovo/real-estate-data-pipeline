@@ -72,7 +72,7 @@ DOWNLOAD_DELAY = 1
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
 # HTTPCACHE_ENABLED = False
 # JOBDIR = None
-LOG_LEVEL = 'INFO'
+
 #HTTPCACHE_EXPIRATION_SECS = 0
 #HTTPCACHE_DIR = "httpcache"
 #HTTPCACHE_IGNORE_HTTP_CODES = []
@@ -90,3 +90,5 @@ MINIO_BUCKET = os.environ.get('MINIO_BUCKET', 'real-estate-bronze')
 ITEM_PIPELINES = {
     'real_estate_scrappers.pipelines.MinIOLoadPipeline': 900,
 }
+
+LOG_LEVEL = 'INFO'
