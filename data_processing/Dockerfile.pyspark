@@ -1,18 +1,25 @@
 FROM python:3.11-slim
 
-ARG SPARK_VERSION=3.5.1
+ARG SPARK_VERSION=3.4.1
 ARG HADOOP_VERSION=3
 ENV SPARK_VERSION=${SPARK_VERSION}
 ENV HADOOP_VERSION=${HADOOP_VERSION}
 ENV SPARK_HOME=/spark
+ENV JAVA_HOME=/opt/java/jdk-17.0.2
+ENV PATH=$JAVA_HOME/bin:$PATH
 ENV PYTHONUNBUFFERED 1
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     wget \
     curl \
-    openjdk-21-jdk-headless \
+    procps \
     build-essential \
+    ca-certificates \
+    && mkdir -p /opt/java \
+    && wget -qO /tmp/openjdk17.tar.gz https://download.java.net/java/GA/jdk17.0.2/dfd4a8d0985749f896bed50d7138ee7f/8/GPL/openjdk-17.0.2_linux-x64_bin.tar.gz \
+    && tar -xzf /tmp/openjdk17.tar.gz -C /opt/java \
+    && rm /tmp/openjdk17.tar.gz \
     && rm -rf /var/lib/apt/lists/*
 
 RUN wget -qO /tmp/spark.tgz "https://archive.apache.org/dist/spark/spark-$SPARK_VERSION/spark-$SPARK_VERSION-bin-hadoop$HADOOP_VERSION.tgz" && \
@@ -24,15 +31,17 @@ ENV HADOOP_AWS_VERSION=3.3.4
 ENV AWS_SDK_VERSION=1.12.518
 ENV DELTA_VERSION=2.4.0
 
-RUN echo "Installing S3A/MinIO and Delta Lake JARs..." && wget -nv https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/${HADOOP_AWS_VERSION}/hadoop-aws-${HADOOP_AWS_VERSION}.jar -P $SPARK_HOME/jars && \
+RUN echo "Installing S3A/MinIO and Delta Lake JARs..." && \
+    wget -nv https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/${HADOOP_AWS_VERSION}/hadoop-aws-${HADOOP_AWS_VERSION}.jar -P $SPARK_HOME/jars && \
     wget -nv https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/${AWS_SDK_VERSION}/aws-java-sdk-bundle-${AWS_SDK_VERSION}.jar -P $SPARK_HOME/jars && \
     wget -nv https://repo1.maven.org/maven2/io/delta/delta-core_2.12/${DELTA_VERSION}/delta-core_2.12-${DELTA_VERSION}.jar -P $SPARK_HOME/jars && \
+    wget -nv https://repo1.maven.org/maven2/io/delta/delta-storage/${DELTA_VERSION}/delta-storage-${DELTA_VERSION}.jar -P $SPARK_HOME/jars && \
     echo "S3A and Delta Lake JARs installed successfully in $SPARK_HOME/jars"
 
 RUN echo 'spark.hadoop.fs.s3a.impl org.apache.hadoop.fs.s3a.S3AFileSystem' >> $SPARK_HOME/conf/spark-defaults.conf
 
 ENV PATH=$PATH:$SPARK_HOME/bin
-ENV PYTHONPATH=$PYTHONPATH:$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.9.7-src.zip
+ENV PYTHONPATH=$PYTHONPATH:$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.9.5-src.zip:/app
 
 COPY data_processing/pyspark_requirements.txt /tmp/pyspark_requirements.txt
 
@@ -41,4 +50,9 @@ RUN pip install --no-cache-dir -r /tmp/pyspark_requirements.txt && \
 
 WORKDIR /app
 
+# Copy all Python modules required by silver_etl_script.py
 COPY data_processing/silver_etl_script.py /app/silver_etl_script.py
+COPY data_processing/schema_config.py /app/schema_config.py
+COPY data_processing/data_quality_checks.py /app/data_quality_checks.py
+COPY data_processing/transformation_utils.py /app/transformation_utils.py
+COPY data_processing/__init__.py /app/__init__.py

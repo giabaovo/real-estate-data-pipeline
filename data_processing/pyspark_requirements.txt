@@ -1,6 +1,6 @@
-pyspark
+pyspark==3.4.1
+delta-spark==2.4.0
 pandas
 numpy
 minio
 geopy
-delta-spark
