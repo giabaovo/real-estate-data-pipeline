@@ -68,15 +68,25 @@ SILVER_SCHEMA = StructType([
     StructField("max_rent_price", DoubleType(), True),
     StructField("price_unit", StringType(), True),
     
+    # Apartment Pricing by Bedroom (from insight_by_bedroom)
+    StructField("apartment_prices", ArrayType(StructType([
+        StructField("number_of_bedroom", IntegerType(), True),
+        StructField("min_price", DoubleType(), True),
+        StructField("max_price", DoubleType(), True),
+        StructField("min_area", DoubleType(), True),
+        StructField("max_area", DoubleType(), True)
+    ])), True),
+    
     # Developer/Investor
     StructField("investor_id", StringType(), True),
     StructField("investor_name", StringType(), True),
     StructField("developer_name", StringType(), True),
     
-    # Dates
-    StructField("handover_date", TimestampType(), True),
-    StructField("construction_start_date", TimestampType(), True),
-    StructField("construction_end_date", TimestampType(), True),
+    # Dates (stored as StringType like ingestion_date)
+    StructField("handover_date_from", StringType(), True),
+    StructField("handover_date", StringType(), True),
+    StructField("construction_start_date", StringType(), True),
+    StructField("construction_end_date", StringType(), True),
     StructField("release_year", StringType(), True),
     
     # Utilities & Facilities
@@ -96,17 +106,17 @@ SILVER_SCHEMA = StructType([
     StructField("master_plan_url", StringType(), True),
     StructField("web_url", StringType(), True),
     
-    # Metadata & Audit
+    # Metadata & Audit (stored as StringType like ingestion_date)
     StructField("record_key", StringType(), True),
     StructField("data_completeness_score", DoubleType(), True),
-    StructField("ingested_at_utc", TimestampType(), False),
-    StructField("silver_processed_at", TimestampType(), False),
+    StructField("ingested_at_utc", StringType(), False),
+    StructField("silver_processed_at", StringType(), False),
     StructField("silver_version", StringType(), False),
     
-    # SCD Type 2 Fields
+    # SCD Type 2 Fields (stored as StringType like ingestion_date)
     StructField("is_current", BooleanType(), False),
-    StructField("valid_from", TimestampType(), False),
-    StructField("valid_to", TimestampType(), True),
+    StructField("valid_from", StringType(), False),
+    StructField("valid_to", StringType(), True),
     
     # Partition Columns
     StructField("ingestion_year", StringType(), False),
@@ -193,7 +203,9 @@ ONEHOUSING_MAPPING = {
     "max_selling_price": "max_selling_price",
     "min_unit_price": "min_unit_price",
     "max_unit_price": "max_unit_price",
+    "apartment_prices": "insight_by_bedroom",
     "developer_name": "developer_name",
+    "handover_date_from": "handover_date_from",
     "construction_start_date": "construction_start_date_from",
     "trans_grade": "trans_grade",
     "infra_grade": "infra_grade",

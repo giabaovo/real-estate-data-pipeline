@@ -16,7 +16,7 @@ from pyspark.sql.functions import (
     col, lit, coalesce, concat_ws, sha2, current_timestamp, 
     regexp_replace, trim, when, date_format, to_date, row_number,
     lower, length, to_timestamp, mean, stddev, abs as spark_abs,
-    split, expr, array, struct, get_json_object, from_json, size
+    split, expr, array, struct, get_json_object, from_json, size, flatten, from_unixtime
 )
 from pyspark.sql.types import ArrayType, StringType
 from pyspark.sql.window import Window
@@ -206,6 +206,67 @@ def apply_schema_mapping(df):
                     {"number_of_basement": "number_basement", "number_of_elevators": "number_ele"}
                 )
         
+        # Handle OneHousing API special transformations
+        if spider_name == "onehousing_api":
+            # 1. Convert total_area from hectares to m²
+            if "total_area" in df_source.columns:
+                print(f"    • Converting total_area from ha to m²")
+                df_source = df_source.withColumn(
+                    "total_area",
+                    when(
+                        col("total_area").isNotNull(),
+                        col("total_area") * 10000  # 1 ha = 10,000 m²
+                    ).otherwise(lit(None))
+                )
+            
+            # 2. Extract images from albums array
+            if "albums" in df_source.columns:
+                print(f"    • Extracting images from albums")
+                try:
+                    df_source = df_source.withColumn(
+                        "images_extracted",
+                        when(
+                            col("albums").isNotNull() & (size(col("albums")) > 0),
+                            expr("transform(albums, x -> x.images)")
+                        ).otherwise(lit(None))
+                    ).withColumn(
+                        "images_flattened",
+                        when(
+                            col("images_extracted").isNotNull(),
+                            expr("flatten(images_extracted)")
+                        ).otherwise(lit(None))
+                    ).drop("images_extracted")
+                    # Rename for mapping
+                    df_source = df_source.withColumn("albums", col("images_flattened")).drop("images_flattened")
+                except Exception as e:
+                    print(f"      ⚠️ Failed to extract images: {e}")
+            
+            # 3. Process insight_by_bedroom for apartment_prices
+            if "insight_by_bedroom" in df_source.columns:
+                print(f"    • Processing apartment prices from insight_by_bedroom")
+                try:
+                    df_source = df_source.withColumn(
+                        "apartment_prices_processed",
+                        when(
+                            col("insight_by_bedroom").isNotNull(),
+                            expr("""
+                                transform(insight_by_bedroom, x -> 
+                                    struct(
+                                        cast(x.number_of_bedroom as int) as number_of_bedroom,
+                                        cast(x.min_price as double) as min_price,
+                                        cast(x.max_price as double) as max_price,
+                                        cast(x.min_carpet_area as double) as min_area,
+                                        cast(x.max_carpet_area as double) as max_area
+                                    )
+                                )
+                            """)
+                        ).otherwise(lit(None))
+                    )
+                    # Rename for mapping
+                    df_source = df_source.withColumn("insight_by_bedroom", col("apartment_prices_processed")).drop("apartment_prices_processed")
+                except Exception as e:
+                    print(f"      ⚠️ Failed to process apartment prices: {e}")
+        
         # Handle Meeyproject API special transformations
         if spider_name == "meeyproject_api":
             # Extract location coordinates
@@ -270,6 +331,34 @@ def apply_schema_mapping(df):
                     df_source = df_source.withColumn(field, col(field).cast("double"))
                 elif field_type == "integer":
                     df_source = df_source.withColumn(field, col(field).cast("integer"))
+        
+        # Special conversion for OneHousing handover_date_from (after mapping)
+        if spider_name == "onehousing_api" and "handover_date_from" in df_source.columns:
+            print(f"    • Converting handover_date_from to Timestamp")
+            try:
+                df_source = df_source.withColumn(
+                    "handover_date_from",
+                    when(
+                        col("handover_date_from").isNotNull(),
+                        # Handle both formats:
+                        # 1. String: "2022-04-01"
+                        # 2. Unix timestamp (ms): 1648771200000
+                        when(
+                            # Check if value is numeric (Unix timestamp in ms)
+                            col("handover_date_from").cast("long").isNotNull() & (col("handover_date_from").cast("long") > 1000000000000),
+                            # Convert Unix timestamp (ms) to timestamp
+                            to_date(
+                                from_unixtime(col("handover_date_from").cast("long") / 1000)
+                            ).cast("timestamp")
+                        )
+                        # Otherwise parse as ISO 8601 string
+                        .otherwise(
+                            to_timestamp(col("handover_date_from"), "yyyy-MM-dd")
+                        )
+                    ).otherwise(lit(None).cast("timestamp"))
+                )
+            except Exception as e:
+                print(f"      ⚠️ Failed to convert handover_date_from: {e}")
         
         # Add missing columns with defaults
         for field, default in DEFAULT_VALUES.items():
@@ -615,7 +704,7 @@ def standardize_data(df):
     # Just ensure ingested_at_utc exists
     if "ingested_at_utc" not in df.columns:
         print("  ⚠️  Warning: ingested_at_utc not found, using current_timestamp")
-        df = df.withColumn("ingested_at_utc", current_timestamp())
+        df = df.withColumn("ingested_at_utc", to_date(current_timestamp()).cast("string"))
     
     # Create partition columns
     df = df \
@@ -761,6 +850,24 @@ def enrich_data(df):
         print("  🏗️  Extracting project features...")
         transformer = DataTransformer()
         df = transformer.extract_project_features(df, "description")
+    
+    # Convert all timestamp fields to StringType (date format) - FINAL STEP
+    print("  📅 Converting all timestamp fields to date format...")
+    timestamp_fields = [
+        "ingested_at_utc", "silver_processed_at", "valid_from", "valid_to",
+        "handover_date_from", "handover_date", 
+        "construction_start_date", "construction_end_date"
+    ]
+    
+    for field in timestamp_fields:
+        if field in df.columns:
+            df = df.withColumn(
+                field,
+                when(
+                    col(field).isNotNull(),
+                    to_date(col(field)).cast("string")
+                ).otherwise(lit(None))
+            )
     
     print("  ✅ Enrichment complete")
     return df

@@ -40,7 +40,7 @@ def calculate_bronze_execution_date(dt: datetime, **context) -> pendulum.DateTim
 @dag(
     dag_id='silver_project_etl_incremental',
     start_date=pendulum.datetime(2025, 1, 1, tz="Asia/Ho_Chi_Minh"),
-    schedule_interval='0 9 * * *',
+    schedule_interval='40 8 * * *',
     catchup=False,
     tags=['etl', 'pyspark', 'delta', 'silver'],
     default_args={
