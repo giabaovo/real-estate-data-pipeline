@@ -689,6 +689,11 @@ def standardize_data(df):
         print("  📧 Standardizing emails...")
         df = transformer.standardize_emails(df, "email")
     
+    # Clean HTML tags from description (for Chotot & Meeyland)
+    if "description" in df.columns:
+        print("  🧹 Cleaning HTML tags from description...")
+        df = transformer.clean_html_tags(df, ["description"])
+    
     # Normalize text fields
     text_cols = [c for c in ["project_name", "address", "description"] if c in df.columns]
     if text_cols:

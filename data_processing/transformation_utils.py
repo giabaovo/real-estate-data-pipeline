@@ -76,6 +76,103 @@ class DataTransformer:
         )
     
     @staticmethod
+    def clean_html_tags(df: DataFrame, text_columns: List[str]) -> DataFrame:
+        """
+        Remove HTML tags from text columns and decode HTML entities
+        
+        Args:
+            df: Input DataFrame
+            text_columns: List of columns to clean
+        
+        Returns:
+            DataFrame with cleaned text (HTML tags removed)
+        """
+        # Define HTML entity replacements
+        html_entities = [
+            # Common entities
+            (r'&nbsp;', ' '),
+            (r'&quot;', '"'),
+            (r'&amp;', '&'),
+            (r'&lt;', '<'),
+            (r'&gt;', '>'),
+            # Vietnamese lowercase - a
+            (r'&aacute;', 'á'),
+            (r'&agrave;', 'à'),
+            (r'&atilde;', 'ã'),
+            (r'&acirc;', 'â'),
+            (r'&Acirc;', 'Â'),
+            # Vietnamese lowercase - e
+            (r'&eacute;', 'é'),
+            (r'&egrave;', 'è'),
+            (r'&etilde;', 'ẽ'),
+            (r'&ecirc;', 'ê'),
+            (r'&Ecirc;', 'Ê'),
+            # Vietnamese lowercase - i
+            (r'&iacute;', 'í'),
+            (r'&igrave;', 'ì'),
+            (r'&itilde;', 'ĩ'),
+            # Vietnamese lowercase - o
+            (r'&oacute;', 'ó'),
+            (r'&ograve;', 'ò'),
+            (r'&otilde;', 'õ'),
+            (r'&ocirc;', 'ô'),
+            (r'&Ocirc;', 'Ô'),
+            # Vietnamese lowercase - u
+            (r'&uacute;', 'ú'),
+            (r'&ugrave;', 'ù'),
+            (r'&utilde;', 'ũ'),
+            # Vietnamese lowercase - y
+            (r'&yacute;', 'ý'),
+            (r'&ygrave;', 'ỳ'),
+            # Vietnamese uppercase
+            (r'&Aacute;', 'Á'),
+            (r'&Agrave;', 'À'),
+            (r'&Eacute;', 'É'),
+            (r'&Egrave;', 'È'),
+            (r'&Iacute;', 'Í'),
+            (r'&Igrave;', 'Ì'),
+            (r'&Oacute;', 'Ó'),
+            (r'&Ograve;', 'Ò'),
+            (r'&Uacute;', 'Ú'),
+            (r'&Ugrave;', 'Ù'),
+        ]
+        
+        for col_name in text_columns:
+            if col_name in df.columns:
+                # Step 1: Remove HTML tags
+                df = df.withColumn(
+                    col_name,
+                    when(
+                        col(col_name).isNotNull(),
+                        regexp_replace(
+                            regexp_replace(col(col_name), r'<br\s*/?>', ' '),
+                            r'<[^>]+>', ' '
+                        )
+                    ).otherwise(col(col_name))
+                )
+                
+                # Step 2: Decode HTML entities sequentially
+                for pattern, replacement in html_entities:
+                    df = df.withColumn(
+                        col_name,
+                        when(
+                            col(col_name).isNotNull(),
+                            regexp_replace(col(col_name), pattern, replacement)
+                        ).otherwise(col(col_name))
+                    )
+                
+                # Step 3: Final cleanup - trim and remove multiple spaces
+                df = df.withColumn(
+                    col_name,
+                    when(
+                        col(col_name).isNotNull(),
+                        trim(regexp_replace(col(col_name), r'\s+', ' '))
+                    ).otherwise(col(col_name))
+                )
+        
+        return df
+    
+    @staticmethod
     def normalize_vietnamese_text(df: DataFrame, text_columns: List[str]) -> DataFrame:
         """
         Normalize Vietnamese text: trim, standardize spacing
