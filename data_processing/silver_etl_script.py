@@ -274,6 +274,43 @@ def apply_schema_mapping(df):
                 print(f"    • Extracting coordinates from location")
                 df_source = DataTransformer.extract_meeyproject_location(df_source)
             
+            # Extract project_type from projectTypes array (unique names only)
+            if "projectTypes" in df_source.columns:
+                print(f"    • Extracting unique project types from projectTypes")
+                try:
+                    df_source = df_source.withColumn(
+                        "projectTypes",
+                        when(
+                            col("projectTypes").isNotNull() & (size(col("projectTypes")) > 0),
+                            # Extract all names from translation arrays and get unique values
+                            expr("""
+                                array_distinct(
+                                    flatten(
+                                        transform(projectTypes, pt -> 
+                                            transform(pt.translation, t -> t.name)
+                                        )
+                                    )
+                                )
+                            """)
+                        ).otherwise(lit(None))
+                    )
+                except Exception as e:
+                    print(f"      ⚠️ Failed to extract project types: {e}")
+            
+            # Extract image URLs from images array
+            if "images" in df_source.columns:
+                print(f"    • Extracting image URLs from images array")
+                try:
+                    df_source = df_source.withColumn(
+                        "images",
+                        when(
+                            col("images").isNotNull() & (size(col("images")) > 0),
+                            expr("transform(images, img -> img.url)")
+                        ).otherwise(lit(None))
+                    )
+                except Exception as e:
+                    print(f"      ⚠️ Failed to extract image URLs: {e}")
+            
             # Extract nested fields
             if "investorRelated" in df_source.columns:
                 print(f"    • Extracting nested investor information")
@@ -285,18 +322,9 @@ def apply_schema_mapping(df):
                 except:
                     pass
             
-            if "juridical" in df_source.columns:
-                print(f"    • Extracting juridical description")
-                try:
-                    df_source = df_source.withColumn(
-                        "description",
-                        col("juridical.description")
-                    )
-                except:
-                    pass
-            
+            # Extract utilities from utilities.basicUtilities
             if "utilities" in df_source.columns:
-                print(f"    • Extracting utilities")
+                print(f"    • Extracting utilities from utilities.basicUtilities")
                 try:
                     df_source = df_source.withColumn(
                         "utilities_internal",
@@ -833,7 +861,12 @@ def enrich_data(df):
     
     if existing_fields:
         score_expr = sum([
-            when(col(f).isNotNull() & (col(f) != "") & (col(f) != 0), 1).otherwise(0)
+            when(
+                col(f).isNotNull() & 
+                (col(f).cast("string") != "") &
+                (col(f).cast("string") != "UNKNOWN"),
+                1
+            ).otherwise(0)
             for f in existing_fields
         ]) / len(existing_fields)
         
@@ -914,6 +947,7 @@ def apply_scd_and_write(spark: SparkSession, df_new):
         df_new.write \
             .format("delta") \
             .mode("append") \
+            .option("mergeSchema", "true") \
             .save(SILVER_PROJECT_PATH)
         
         print("  ✅ SCD Type 2 merge completed")

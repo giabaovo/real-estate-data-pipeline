@@ -43,6 +43,7 @@ SILVER_SCHEMA = StructType([
     StructField("total_property", IntegerType(), True),
     StructField("unit_total", StringType(), True),
     StructField("number_of_floors", IntegerType(), True),
+    StructField("total_floor", IntegerType(), True),
     StructField("number_of_basement", IntegerType(), True),
     StructField("number_of_elevators", IntegerType(), True),
     StructField("green_density", DoubleType(), True),
@@ -167,11 +168,20 @@ MEEYPROJECT_MAPPING = {
     "project_name": "name",
     "project_code": "tradeName",
     "project_slug": "slug",
-    "description": "juridical.description",
+    "project_type": "projectTypes",  # Will extract unique names from translation array
+    "description": "description",  # Direct field
     "address": "address",
     "total_area": "totalArea",
+    "total_property": "totalApartment",
+    "min_selling_price": "lowestPriceByProduct",
+    "max_selling_price": "highestPriceByProduct",
+    "min_unit_price": "lowestPriceByM2",
+    "max_unit_price": "highestPriceByM2",
+    "construction_density": "buildingDensity",
+    "number_of_blocks": "totalBuilding",
+    "total_floor": "totalFloor",
     "investor_name": "investorRelated.investor.name",
-    "images": "images",
+    "images": "images",  # Will extract URL array
     "videos": "videos",
     "utilities_internal": "utilities.basicUtilities"
 }
@@ -246,6 +256,7 @@ TYPE_CONVERSIONS = {
     "number_of_blocks": "integer",
     "total_property": "integer",
     "number_of_floors": "integer",
+    "total_floor": "integer",
     "number_of_basement": "integer",
     "number_of_elevators": "integer",
     "min_bedroom": "integer",
